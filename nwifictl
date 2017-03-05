@@ -1,5 +1,6 @@
 #!/bin/bash
 
+# process file directories
 RUND=/run
 ALTD=/var/run
 
