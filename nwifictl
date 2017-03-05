@@ -1,16 +1,16 @@
 #!/bin/bash
 
-RUND="/run"
-ALTD="/var/run"
+RUND=/run
+ALTD=/var/run
+
+DHCPD=`which dhcpcd`
 
 
 function help() {
 	echo "A WiFi Connection Tool"
-	echo -e "\nUsage: nwifictl -e <essid> -i <iface> [options]"
+	echo -e "\nUsage: nwifictl -e|-essid <essid> -i|-iface <iface> [options]"
 	echo "[options]:"
-#	echo -e "\t-e|-essid [ESSID]\t\tSpecify the SSID to connect to "
 	echo -e "\t-p|-psk [PSK]\t\tSpecify the password"
-#	echo -e "\t-i|-iface [IFACE]\t\tSpecify the interface to use"
 	echo -e "\t-s|-spoof [ADDR]\tSpoof interface MAC address"
 	echo -e "\t-c|-config [CONFIG]\tSpecify a custom wpa_supplicant config"
 	echo -e "\t-help\t\t\tPrints this help text"
@@ -37,18 +37,12 @@ function connect() {
 	else
 	# if it's a password-protected network
 
-		# create and initialize config if it doesn't exist
-		if [ ! -e "$3" ]; then
-			touch $3
-			echo -e "ctrl_interface=$RUND/wpa_supplicant\nctrl_interface_group=root\n" > $3
-		fi
-
 		# add network to the configuration file and initialize
 		wpa_passphrase $1 $2 >> $3
-		wpa_supplicant -B -Dwext -i $IFACE -c $3 2>/dev/null
+		wpa_supplicant -B -Dnl80211 -i$IFACE -c$3 2>/dev/null
 
 		# get an IP address
-		dhcpcd $IFACE 2>/dev/null
+		$DHCPD $IFACE 2>/dev/null
 	fi
 
 	# wait for it to fully connect
@@ -71,9 +65,7 @@ while [ "$1" != "" ]; do
 	value=`echo $1|awk -F= '{print $2}'`
 	
 	# help text
-	if [ $1 == "-help" ]; then
-		help
-	fi
+	[ $1 == "-help" ] && help
 
 	case $param in
 		-e|-essid)
@@ -112,9 +104,7 @@ if [ -z "$SSID" ]; then
 fi
 
 # set default config if none specified
-if [ -z "$CONFIG" ]; then
-	CONFIG="/etc/wpa_supplicant.conf"	
-fi
+[ -z "$CONFIG" ] && CONFIG="/etc/wpa_supplicant.conf"	
 
 # spoof mac if -s option is specified
 if [ -n "$MAC" ]; then
@@ -124,12 +114,12 @@ if [ -n "$MAC" ]; then
 fi
 
 # do stuff depending on auth or no auth
+echo "[*] Connecting to $SSID, this may take a few moments... "
+
 if [ -n "$PASS" ]; then
-	echo "[*] Connecting to $SSID, this may take a few moments... "
 	# if there is a password specified
 	connect $SSID $PASS $CONFIG
 else
-	echo "[*] Connecting to $SSID, this may take a few moments... "
 	# if it's an open network
 	connect $SSID "" $CONFIG
 fi
