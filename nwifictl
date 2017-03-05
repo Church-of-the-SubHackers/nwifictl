@@ -1,0 +1,135 @@
+#!/bin/bash
+
+RUND="/run"
+ALTD="/var/run"
+
+
+function help() {
+	echo "A WiFi Connection Tool"
+	echo -e "\nUsage: nwifictl -e <essid> -i <iface> [options]"
+	echo "[options]:"
+#	echo -e "\t-e|-essid [ESSID]\t\tSpecify the SSID to connect to "
+	echo -e "\t-p|-psk [PSK]\t\tSpecify the password"
+#	echo -e "\t-i|-iface [IFACE]\t\tSpecify the interface to use"
+	echo -e "\t-s|-spoof [ADDR]\tSpoof interface MAC address"
+	echo -e "\t-h|-help\t\tPrints this help text"
+
+	exit 0
+}
+
+function connect() {
+	# stop NetworkManager
+	service NetworkManager stop	
+
+	# clean up old leases
+	killall dhcpcd && killall wpa_supplicant 2>/dev/null
+	rm $RUND/dhcpcd*.pid 2>/dev/null
+	rm $RUND/wpa_supplicant/$IFACE 2>/dev/null
+
+	if [ -z "$2" ]; then
+	# if it's an open network
+
+		# simple connect with iwconfig
+		ifconfig $IFACE down
+		iwconfig $IFACE essid $1
+		ifconfig $IFACE up
+	else
+	# if it's a password-protected network
+
+		# create and initialize config if it doesn't exist
+		if [ ! -e "$3" ]; then
+			touch $3
+			echo -e "ctrl_interface=$RUND/wpa_supplicant\nctrl_interface_group=root\n" > $3
+		fi
+
+		# add network to the configuration file and initialize
+		wpa_passphrase $1 $2 >> $3
+		wpa_supplicant -B -Dwext -i $IFACE -c $3 2>/dev/null
+
+		# get an IP address
+		dhcpcd $IFACE 2>/dev/null
+	fi
+
+	# wait for it to fully connect
+	sleep 10
+
+	# test the connection
+	ping -c2 -q 8.8.8.8 &>/dev/null
+
+	if [ $? -eq 0 ]; then
+		echo "[+] Successfully connected to $1"
+	else
+		echo "[!] Failed to connect to $1"
+		exit 2
+	fi
+}
+
+# begin command-line parsing 
+while [ "$1" != "" ]; do
+	param=`echo $1|awk -F= '{print $1}'`
+	value=`echo $1|awk -F= '{print $2}'`
+	
+	# help text
+	if [ $1 == "-help" ]; then
+		help
+	fi
+
+	case $param in
+		-e|-essid)
+			SSID=$value
+		    	;;
+		-p|-psk) 
+			PASS=$value
+		    	;;
+		-i|-iface) 
+			IFACE=$value
+		    	;;
+		-s|-spoof)
+			MAC=$value
+			;;
+		-c|-config)
+			CONFIG=$value
+			;;
+		*) 
+			echo "[!] $param is an incorrect option. See -help for more info."
+		   	exit 1
+		   	;;
+	esac
+	shift
+done
+
+# require -i option
+if [ -z "$IFACE" ]; then
+	echo "[!] You must specify an interface to use."
+	exit 1
+fi
+
+# require -e option
+if [ -z "$SSID" ]; then
+	echo "[!] You must specify a network to connect to."
+	exit 1
+fi
+
+# set default config if none specified
+if [ -z "$CONFIG" ]; then
+	CONFIG="/etc/wpa_supplicant.conf"	
+fi
+
+# spoof mac if -s option is specified
+if [ -n "$MAC" ]; then
+	ifconfig $IFACE down
+	ifconfig $IFACE hw ether $MAC
+	ifconfig $IFACE up
+fi
+
+# do stuff depending on auth or no auth
+if [ -n "$PASS" ]; then
+	echo "[*] Connecting to $SSID, this may take a few moments... "
+	# if there is a password specified
+	connect $SSID $PASS $CONFIG
+else
+	echo "[*] Connecting to $SSID, this may take a few moments... "
+	# if it's an open network
+	connect $SSID "" $CONFIG
+fi
+
