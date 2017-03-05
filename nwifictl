@@ -12,7 +12,8 @@ function help() {
 	echo -e "\t-p|-psk [PSK]\t\tSpecify the password"
 #	echo -e "\t-i|-iface [IFACE]\t\tSpecify the interface to use"
 	echo -e "\t-s|-spoof [ADDR]\tSpoof interface MAC address"
-	echo -e "\t-h|-help\t\tPrints this help text"
+	echo -e "\t-c|-config [CONFIG]\tSpecify a custom wpa_supplicant config"
+	echo -e "\t-help\t\t\tPrints this help text"
 
 	exit 0
 }
