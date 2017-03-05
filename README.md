@@ -6,8 +6,8 @@ This tool is used for connecting to open or password-protected networks with an 
 # Usage
     nwifictl -e <essid> -i <iface> [options]
     [options]:
-	-p|-psk [PSK]		Specify the password
-	-s|-spoof [ADDR]	Spoof interface MAC address
-	-c|-config [CONFIG]	Specify a custom wpa_supplicant config
-	-help			Prints this help text
+    	-p|-psk [PSK]		Specify the password
+    	-s|-spoof [ADDR]	Spoof interface MAC address
+    	-c|-config [CONFIG]	Specify a custom wpa_supplicant config
+    	-help			Prints this help text
 
