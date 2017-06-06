@@ -1,63 +1,80 @@
 #!/bin/bash
 
-# process file directories
-RUND=/run
-ALTD=/var/run
-
-DHCPD=`which dhcpcd`
+RUND="/run"
+ALTD="/var/run"
 
 
 function help() {
 	echo "A WiFi Connection Tool"
-	echo -e "\nUsage: nwifictl -e|-essid <essid> -i|-iface <iface> [options]"
+	echo -e "\nUsage: nwifictl -e <essid> -i <iface> [options]"
 	echo "[options]:"
-	echo -e "\t-p|-psk [PSK]\t\tSpecify the password"
-	echo -e "\t-s|-spoof [ADDR]\tSpoof interface MAC address"
-	echo -e "\t-c|-config [CONFIG]\tSpecify a custom wpa_supplicant config"
+	echo -e "\t-e|-essid=[ESSID]\tSpecify the SSID to connect to "
+	echo -e "\t-p|-psk=[PSK]\t\tSpecify the password"
+	echo -e "\t-i|-iface=[IFACE]\tSpecify the interface to use"
+	echo -e "\t-s|-spoof=[ADDR]\tSpoof interface MAC address"
+	echo -e "\t-c|-config=[CONFIG]\tSpecify a custom wpa_supplicant config"
 	echo -e "\t-help\t\t\tPrints this help text"
 
 	exit 0
 }
 
+function connection_test() {
+	# get local IP address
+	local_ip=`ip addr |grep 'state UP' -A2 |tail -n1 |awk '{ print $2 }' |cut -d/ -f1`
+	
+	echo "Your local IP address is: $local_ip"
+	echo "[*] Testing internet connection, this may take a few moments."
+	
+	# see if we can reach the interwebz
+	ping -c1 -q 8.8.8.8 &>/dev/null
+
+	if [ $? -eq 0 ]; then
+		echo "[+] Successfully connected to $1"
+	else
+		echo "[-] Failed to connect to $1"
+		exit 2
+	fi
+}
+
 function connect() {
 	# stop NetworkManager
-	service NetworkManager stop	
+	service NetworkManager stop 2>/dev/null
 
 	# clean up old leases
-	killall dhcpcd && killall wpa_supplicant 2>/dev/null
-	rm $RUND/dhcpcd*.pid 2>/dev/null
-	rm $RUND/wpa_supplicant/$IFACE 2>/dev/null
+	killall dhclient 2>/dev/null && killall wpa_supplicant 2>/dev/null
+	rm $RUND/dhclient.pid 2>/dev/null && rm $ALTD/dhclient.pid
+	rm $RUND/wpa_supplicant/$IFACE 2>/dev/null && rm $ALTD/wpa_supplicant/$IFACE 2>/dev/null
 
 	if [ -z "$2" ]; then
 	# if it's an open network
 
 		# simple connect with iwconfig
-		ifconfig $IFACE down
-		iwconfig $IFACE essid $1
-		ifconfig $IFACE up
+		ifconfig $4 down
+		iwconfig $4 essid $1
+		ifconfig $4 up
 	else
 	# if it's a password-protected network
 
+		# create and initialize config if it doesn't exist
+		if [ ! -e "$3" ]; then
+			touch $3
+			echo -e "ctrl_interface=$RUND/wpa_supplicant\nctrl_interface_group=root\n" > $3
+		fi
+
 		# add network to the configuration file and initialize
 		wpa_passphrase $1 $2 >> $3
-		wpa_supplicant -B -Dnl80211 -i$IFACE -c$3 2>/dev/null
-
-		# get an IP address
-		$DHCPD $IFACE 2>/dev/null
+		wpa_supplicant -B -Dnl80211 -i $4 -c $3 2>/dev/null
 	fi
+	
+	# get an IP address from the AP
+	dhclient $4 2>/dev/null
 
+	echo "Waiting to finish connecting..."
 	# wait for it to fully connect
 	sleep 10
 
-	# test the connection
-	ping -c2 -q 8.8.8.8 &>/dev/null
-
-	if [ $? -eq 0 ]; then
-		echo "[+] Successfully connected to $1"
-	else
-		echo "[!] Failed to connect to $1"
-		exit 2
-	fi
+	# cheap workaround (will fix soon)
+	echo 8.8.8.8 >> /etc/resolv.conf
 }
 
 # begin command-line parsing 
@@ -66,7 +83,9 @@ while [ "$1" != "" ]; do
 	value=`echo $1|awk -F= '{print $2}'`
 	
 	# help text
-	[ $1 == "-help" ] && help
+	if [ $1 == "-help" ]; then
+		help
+	fi
 
 	case $param in
 		-e|-essid)
@@ -105,7 +124,9 @@ if [ -z "$SSID" ]; then
 fi
 
 # set default config if none specified
-[ -z "$CONFIG" ] && CONFIG="/etc/wpa_supplicant.conf"	
+if [ -z "$CONFIG" ]; then
+	CONFIG="/etc/wpa_supplicant.conf"	
+fi
 
 # spoof mac if -s option is specified
 if [ -n "$MAC" ]; then
@@ -115,13 +136,15 @@ if [ -n "$MAC" ]; then
 fi
 
 # do stuff depending on auth or no auth
-echo "[*] Connecting to $SSID, this may take a few moments... "
-
 if [ -n "$PASS" ]; then
+	echo "[*] Connecting to $SSID, this may take a few moments... "
 	# if there is a password specified
-	connect $SSID $PASS $CONFIG
+	connect $SSID $PASS $CONFIG $IFACE
+	connection_test $SSID
 else
+	echo "[*] Connecting to $SSID, this may take a few moments... "
 	# if it's an open network
-	connect $SSID "" $CONFIG
+	connect $SSID "" $CONFIG $IFACE
+	connection_test $SSID
 fi
 
