@@ -26,7 +26,7 @@ function connection_test() {
 	echo "[*] Testing internet connection, this may take a few moments."
 	
 	# see if we can reach the interwebz
-	ping -c1 -q 8.8.8.8 &>/dev/null
+	ping -c1 -q 208.67.222.222 &>/dev/null
 
 	if [ $? -eq 0 ]; then
 		echo "[+] Successfully connected to $1"
@@ -49,9 +49,9 @@ function connect() {
 	# if it's an open network
 
 		# simple connect with iwconfig
-		ifconfig $4 down
+		ip link set $4 down
 		iwconfig $4 essid $1
-		ifconfig $4 up
+		ip link set $4 up
 	else
 	# if it's a password-protected network
 
@@ -74,7 +74,7 @@ function connect() {
 	sleep 10
 
 	# cheap workaround (will fix soon)
-	echo 8.8.8.8 >> /etc/resolv.conf
+	echo nameserver 208.67.222.222 >> /etc/resolv.conf
 }
 
 # begin command-line parsing 
@@ -92,7 +92,7 @@ while [ "$1" != "" ]; do
 			SSID=$value
 		    	;;
 		-p|-psk) 
-			PASS=$value
+			PASS="$value"
 		    	;;
 		-i|-iface) 
 			IFACE=$value
@@ -130,9 +130,9 @@ fi
 
 # spoof mac if -s option is specified
 if [ -n "$MAC" ]; then
-	ifconfig $IFACE down
-	ifconfig $IFACE hw ether $MAC
-	ifconfig $IFACE up
+	ip link set $IFACE down
+	ip link set dev $IFACE address $MAC
+	ip link set $IFACE up
 fi
 
 # do stuff depending on auth or no auth
