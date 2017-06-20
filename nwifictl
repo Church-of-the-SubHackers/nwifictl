@@ -3,6 +3,19 @@
 RUND="/run"
 ALTD="/var/run"
 
+which dhclient >/dev/null
+
+# test for the appropriate DHCP client
+if [ "$?" -eq 0 ]; then
+	CLIENT=dhclience
+elif [ "$?" -eq 1 ]; then
+	CLIENT=dhcpcd
+else
+	echo "[!] Unknown DHCP client. Exiting..."
+	
+	exit 1
+fi
+
 
 function help() {
 	echo "A WiFi Connection Tool"
@@ -41,8 +54,8 @@ function connect() {
 	service NetworkManager stop 2>/dev/null
 
 	# clean up old leases
-	killall dhclient 2>/dev/null && killall wpa_supplicant 2>/dev/null
-	rm $RUND/dhclient.pid 2>/dev/null && rm $ALTD/dhclient.pid
+	killall $CLIENT 2>/dev/null && killall wpa_supplicant 2>/dev/null
+	rm $RUND/$CLIENT.pid 2>/dev/null && rm $ALTD/$CLIENT.pid
 	rm $RUND/wpa_supplicant/$IFACE 2>/dev/null && rm $ALTD/wpa_supplicant/$IFACE 2>/dev/null
 
 	if [ -z "$2" ]; then
@@ -67,7 +80,7 @@ function connect() {
 	fi
 	
 	# get an IP address from the AP
-	dhclient $4 2>/dev/null
+	$CLIENT $4 2>/dev/null
 
 	echo "Waiting to finish connecting..."
 	# wait for it to fully connect
